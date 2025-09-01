@@ -71,7 +71,7 @@ public class JMAPClient {
 
     private let baseURL: URL
     private let httpClient: HTTPClient
-    private var authToken: String?
+    private var authTokenData: NSMutableData?
     private var sessionInfo: JMAPSession?
     private var accountId: String?
 
@@ -94,6 +94,13 @@ public class JMAPClient {
         self.init(baseURL: baseURL, httpClient: URLSessionHTTPClient(session: session))
     }
 
+    // MARK: - Deinitialization
+
+    deinit {
+        // Securely clear authentication token from memory
+        clearAuthToken()
+    }
+
     // MARK: - Authentication
 
     /// Authenticate with the JMAP server using a bearer token
@@ -106,7 +113,13 @@ public class JMAPClient {
     /// - Throws: `JMAPError.authenticationFailed` if the token is invalid or authentication fails
     ///           `JMAPError.invalidResponse` if the server response is malformed
     public func authenticate(with token: String) async throws -> JMAPSession {
-        self.authToken = token
+        // Clear any existing token first
+        clearAuthToken()
+
+        // Create mutable data for secure storage
+        if let tokenData = token.data(using: .utf8) {
+            self.authTokenData = NSMutableData(data: tokenData)
+        }
 
         let sessionURL = baseURL.appendingPathComponent("jmap/session")
         var request = URLRequest(url: sessionURL)
@@ -147,7 +160,8 @@ public class JMAPClient {
     /// - Returns: JMAP response
     /// - Throws: JMAPError if the request fails
     public func makeRequest(_ request: JMAPRequest) async throws -> JMAPResponse {
-        guard let authToken = authToken else {
+        guard let authTokenData = authTokenData,
+              let authToken = String(data: authTokenData as Data, encoding: .utf8) else {
             throw JMAPError.notAuthenticated
         }
 
@@ -583,7 +597,24 @@ public class JMAPClient {
 
     /// Whether the client is authenticated
     public var isAuthenticated: Bool {
-        return authToken != nil && sessionInfo != nil
+        return authTokenData != nil && sessionInfo != nil
+    }
+
+    /// Securely logout and clear authentication data
+    public func logout() {
+        clearAuthToken()
+        sessionInfo = nil
+        accountId = nil
+    }
+
+    // MARK: - Private Methods
+
+    private func clearAuthToken() {
+        if let tokenData = authTokenData {
+            // Securely overwrite the token data with zeros
+            memset(tokenData.mutableBytes, 0, tokenData.length)
+        }
+        authTokenData = nil
     }
 }
 
