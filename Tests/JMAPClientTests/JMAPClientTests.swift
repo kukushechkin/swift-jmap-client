@@ -593,6 +593,72 @@ final class JMAPClientTests: XCTestCase {
         }
     }
 
+    // MARK: - Security Tests
+
+    func testInvalidURLFromServer() async throws {
+        // Given - create a client with invalid session info
+        try await authenticateClient()
+
+        // Create a test client that will receive invalid session data
+        let testClient = JMAPClient(baseURL: URL(string: "https://api.example.com")!, httpClient: mockHTTPClient)
+
+        // Create session response with empty/invalid URL
+        let invalidSessionResponse = """
+        {
+            "capabilities": {
+                "urn:ietf:params:jmap:core": {},
+                "urn:ietf:params:jmap:mail": {}
+            },
+            "accounts": {
+                "account1": {
+                    "name": "test@example.com",
+                    "isPersonal": true,
+                    "isReadOnly": false,
+                    "accountCapabilities": {
+                        "urn:ietf:params:jmap:mail": {}
+                    }
+                }
+            },
+            "primaryAccounts": {
+                "urn:ietf:params:jmap:mail": "account1"
+            },
+            "username": "test@example.com",
+            "apiUrl": "",
+            "downloadUrl": "https://api.example.com/jmap/download/",
+            "uploadUrl": "https://api.example.com/jmap/upload/",
+            "eventSourceUrl": "https://api.example.com/jmap/eventsource/",
+            "state": "state123"
+        }
+        """
+
+        mockHTTPClient.nextResponse = (
+            invalidSessionResponse.data(using: .utf8)!,
+            HTTPURLResponse(url: URL(string: "https://api.example.com/session")!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        )
+
+        // Authenticate with the invalid session response
+        _ = try await testClient.authenticate(with: "test-token")
+
+        // Now try to make a request which should fail due to invalid URL
+        let methodCall = JMAPMethodCall(
+            method: "Mailbox/get",
+            arguments: ["accountId": "account1"],
+            clientId: "0"
+        )
+        let request = JMAPRequest(using: ["urn:ietf:params:jmap:core"], methodCalls: [methodCall])
+
+        do {
+            _ = try await testClient.makeRequest(request)
+            XCTFail("Expected invalidURL error")
+        } catch {
+            XCTAssertTrue(error is JMAPError)
+            if case JMAPError.invalidURL = error {
+                // Expected
+            } else {
+                XCTFail("Expected invalidURL error, got: \(error)")
+            }
+        }
+    }
     // MARK: - Helper Methods
 
     private func authenticateClient() async throws {
