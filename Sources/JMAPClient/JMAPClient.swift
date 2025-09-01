@@ -155,7 +155,9 @@ public class JMAPClient {
             throw JMAPError.notAuthenticated
         }
 
-        let apiURL = URL(string: sessionInfo.apiUrl)!
+        guard let apiURL = URL(string: sessionInfo.apiUrl) else {
+            throw JMAPError.invalidURL
+        }
         var urlRequest = URLRequest(url: apiURL)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -608,6 +610,7 @@ public enum JMAPError: Error, LocalizedError {
     case identityNotFound
     case mailboxNotFound
     case sendingFailed(reason: String)
+    case invalidURL
 
     public var errorDescription: String? {
         switch self {
@@ -625,6 +628,8 @@ public enum JMAPError: Error, LocalizedError {
             return "Required mailbox not found."
         case .sendingFailed(let reason):
             return "Failed to send email: \(reason)"
+        case .invalidURL:
+            return "Invalid URL received from server."
         }
     }
 }
