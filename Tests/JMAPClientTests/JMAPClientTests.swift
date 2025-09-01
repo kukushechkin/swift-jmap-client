@@ -7,6 +7,9 @@
 
 import XCTest
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import JMAPClient
 
 final class JMAPClientTests: XCTestCase {

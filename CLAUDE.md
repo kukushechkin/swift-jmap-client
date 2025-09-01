@@ -39,6 +39,7 @@ Package.swift            # Swift Package Manager configuration
 
 - **swift-argument-parser** (1.2.0+): CLI argument parsing and subcommands
 - **swift-docc-plugin** (1.1.0+): Documentation generation support
+- **async-http-client** (1.19.0+): High-performance HTTP client for networking
 
 ## Development Commands
 
@@ -143,10 +144,11 @@ let mailboxes = try await client.getMailboxes()
 
 ## Platform Support
 
-- macOS 13.0+
-- iOS 16.0+
-- tvOS 16.0+
-- watchOS 9.0+
+- **Linux** (Ubuntu 20.04+, other distributions)
+- macOS 12.0+
+- iOS 15.0+
+- tvOS 15.0+
+- watchOS 8.0+
 
 ## JMAP Protocol References
 
@@ -156,9 +158,13 @@ let mailboxes = try await client.getMailboxes()
 
 ## Development Notes
 
-- Uses Swift 6.2+ with strict concurrency enabled
+- **Cross-platform support**: Works on Linux, macOS, iOS, tvOS, and watchOS
+- Uses Swift 5.8+ with async/await and modern concurrency
+- **HTTP Client**: Uses AsyncHTTPClient for high-performance networking
+- Strict concurrency enabled for thread safety
 - Follows Swift API design guidelines
 - Comprehensive DocC documentation
 - Full async/await support throughout
 - Proper error handling with localized descriptions
 - Memory-safe with modern Swift practices
+- CI/CD testing on both macOS and Ubuntu Linux

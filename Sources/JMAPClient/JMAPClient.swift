@@ -4,6 +4,12 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+import AsyncHTTPClient
+import NIOCore
+import NIOHTTP1
 
 /// HTTP Client protocol for making requests
 ///
@@ -12,18 +18,54 @@ public protocol HTTPClient {
     func data(for request: URLRequest) async throws -> (Data, URLResponse)
 }
 
-/// Default URLSession implementation of HTTPClient
-public class URLSessionHTTPClient: HTTPClient {
-    private let session: URLSession
+/// AsyncHTTPClient implementation of HTTPClient
+public class AsyncHTTPClientHTTPClient: HTTPClient {
+    private let httpClient: AsyncHTTPClient.HTTPClient
 
-    public init(session: URLSession = .shared) {
-        self.session = session
+    public init(httpClient: AsyncHTTPClient.HTTPClient? = nil) {
+        self.httpClient = httpClient ?? AsyncHTTPClient.HTTPClient(eventLoopGroupProvider: .singleton)
+    }
+
+    deinit {
+        try? httpClient.syncShutdown()
     }
 
     public func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        return try await session.data(for: request)
+        guard let url = request.url else {
+            throw URLError(.badURL)
+        }
+
+        var httpRequest = AsyncHTTPClient.HTTPClientRequest(url: url.absoluteString)
+        httpRequest.method = HTTPMethod(rawValue: request.httpMethod ?? "GET")
+
+        // Copy headers
+        if let headers = request.allHTTPHeaderFields {
+            for (key, value) in headers {
+                httpRequest.headers.add(name: key, value: value)
+            }
+        }
+
+        // Copy body
+        if let body = request.httpBody {
+            httpRequest.body = .bytes(ByteBuffer(bytes: body))
+        }
+
+        let response = try await httpClient.execute(httpRequest, timeout: .seconds(30))
+        let responseBody = try await response.body.collect(upTo: 10 * 1024 * 1024) // 10MB limit
+        let data = Data(responseBody.readableBytesView)
+
+        let urlResponse = HTTPURLResponse(
+            url: url,
+            statusCode: Int(response.status.code),
+            httpVersion: "HTTP/1.1",
+            headerFields: Dictionary<String, String>(uniqueKeysWithValues: response.headers.map { ($0.name, $0.value) })
+        )!
+
+        return (data, urlResponse)
     }
 }
+
+
 
 /// A Swift client for the JMAP (JSON Meta Application Protocol) email protocol
 ///
@@ -81,18 +123,14 @@ public class JMAPClient {
     /// - Parameters:
     ///   - baseURL: The base URL of the JMAP server
     ///   - httpClient: HTTPClient to use for requests (defaults to URLSessionHTTPClient)
-    public init(baseURL: URL, httpClient: HTTPClient = URLSessionHTTPClient()) {
+    public init(baseURL: URL, httpClient: HTTPClient = AsyncHTTPClientHTTPClient()) {
         self.baseURL = baseURL
         self.httpClient = httpClient
     }
 
-    /// Initialize JMAP Client with server URL and URLSession
-    /// - Parameters:
-    ///   - baseURL: The base URL of the JMAP server
-    ///   - session: URLSession to use for requests (defaults to .shared)
-    public convenience init(baseURL: URL, session: URLSession) {
-        self.init(baseURL: baseURL, httpClient: URLSessionHTTPClient(session: session))
-    }
+
+
+
 
     // MARK: - Deinitialization
 
