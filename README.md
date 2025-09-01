@@ -2,8 +2,8 @@
 
 A comprehensive Swift implementation of the JMAP (JSON Meta Application Protocol) for email operations, providing both a reusable library and a command-line interface.
 
-[![Swift](https://img.shields.io/badge/Swift-6.2+-orange.svg)](https://swift.org)
-[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20iOS%20%7C%20tvOS%20%7C%20watchOS-lightgrey.svg)](https://developer.apple.com/swift/)
+[![Swift](https://img.shields.io/badge/Swift-5.8+-orange.svg)](https://swift.org)
+[![Platforms](https://img.shields.io/badge/Platforms-Linux%20%7C%20macOS%20%7C%20iOS%20%7C%20tvOS%20%7C%20watchOS-lightgrey.svg)](https://developer.apple.com/swift/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Features
@@ -31,7 +31,7 @@ A comprehensive Swift implementation of the JMAP (JSON Meta Application Protocol
 - ✅ **Comprehensive Tests** - Unit tests with mock HTTP client
 - ✅ **Example Scripts** - Ready-to-use examples
 - ✅ **Swift Package Manager** - Easy integration
-- ✅ **Cross-Platform** - macOS, iOS, tvOS, watchOS support
+- ✅ **Cross-Platform** - Linux, macOS, iOS, tvOS, watchOS support
 
 ## Quick Start
 
@@ -41,7 +41,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/kukushechkin/swift-jmap-client.git", from: "0.2")
+    .package(url: "https://github.com/kukushechkin/swift-jmap-client.git", from: "0.3")
 ]
 ```
 
@@ -141,8 +141,21 @@ Consult your email provider's documentation for API token creation.
 ## Development
 
 ### Requirements
-- Swift 6.2+
-- macOS 13+ (for development)
+- Swift 5.8+
+- macOS 12+ (for development)
+
+### Testing on Linux with Docker
+
+To verify Linux compatibility locally:
+
+```bash
+# Build and test on Ubuntu Linux
+docker build -t swift-jmap-test .
+
+# The Dockerfile automatically runs: swift build && swift test
+```
+
+This Dockerfile uses the official Swift 5.10 image and replicates the GitHub Actions environment for local testing.
 
 ### Building
 ```bash
@@ -248,7 +261,7 @@ do {
 ## Performance Considerations
 
 - The client maintains a single session per instance
-- HTTP requests are made using `URLSession` with proper async/await
+- HTTP requests are made using `AsyncHTTPClient` with proper async/await
 - Large email lists are paginated (default limit: 50, max: 256)
 - Email bodies are loaded on-demand to optimize memory usage
 
