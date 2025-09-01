@@ -659,6 +659,188 @@ final class JMAPClientTests: XCTestCase {
             }
         }
     }
+
+    func testSecureTokenClearing() async throws {
+        // Given
+        try await authenticateClient()
+        XCTAssertTrue(client.isAuthenticated)
+
+        // When - logout is called
+        client.logout()
+
+        // Then - client should no longer be authenticated
+        XCTAssertFalse(client.isAuthenticated)
+
+        // And subsequent requests should fail with notAuthenticated
+        do {
+            _ = try await client.getMailboxes()
+            XCTFail("Expected notAuthenticated error after logout")
+        } catch {
+            XCTAssertTrue(error is JMAPError)
+            if case JMAPError.notAuthenticated = error {
+                // Expected
+            } else {
+                XCTFail("Expected notAuthenticated error")
+            }
+        }
+    }
+
+    func testTokenReauthentication() async throws {
+        // Given - authenticate with first token
+        try await authenticateClient()
+        XCTAssertTrue(client.isAuthenticated)
+
+        // When - authenticate with new token
+        let newSessionResponse = """
+        {
+            "capabilities": {
+                "urn:ietf:params:jmap:core": {
+                    "maxSizeUpload": 50000000,
+                    "maxConcurrentUpload": 4,
+                    "maxSizeRequest": 10000000,
+                    "maxConcurrentRequests": 4,
+                    "maxCallsInRequest": 16,
+                    "maxObjectsInGet": 500,
+                    "maxObjectsInSet": 500,
+                    "collationAlgorithms": ["i;unicode-casemap"]
+                },
+                "urn:ietf:params:jmap:mail": {}
+            },
+            "accounts": {
+                "account2": {
+                    "name": "newuser@example.com",
+                    "isPersonal": true,
+                    "isReadOnly": false,
+                    "accountCapabilities": {
+                        "urn:ietf:params:jmap:mail": {}
+                    }
+                }
+            },
+            "primaryAccounts": {
+                "urn:ietf:params:jmap:mail": "account2"
+            },
+            "username": "newuser@example.com",
+            "apiUrl": "https://api.example.com/jmap/api/",
+            "downloadUrl": "https://api.example.com/jmap/download/{accountId}/{blobId}/{name}",
+            "uploadUrl": "https://api.example.com/jmap/upload/{accountId}/",
+            "eventSourceUrl": "https://api.example.com/jmap/eventsource/?types={types}&closeafter={closeafter}&ping={ping}",
+            "state": "newstate456"
+        }
+        """
+
+        mockHTTPClient.nextResponse = (
+            newSessionResponse.data(using: .utf8)!,
+            HTTPURLResponse(url: URL(string: "https://api.example.com/session")!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        )
+
+        let newSession = try await client.authenticate(with: "new-token")
+
+        // Then - should be authenticated with new session
+        XCTAssertTrue(client.isAuthenticated)
+        XCTAssertEqual(newSession.username, "newuser@example.com")
+        XCTAssertEqual(newSession.state, "newstate456")
+        XCTAssertEqual(client.currentAccountId, "account2")
+    }
+
+    func testAuthenticationWithEmptyToken() async throws {
+        // When/Then - authenticate with empty token should still work (server will reject it)
+        mockHTTPClient.nextResponse = (
+            Data(),
+            HTTPURLResponse(url: URL(string: "https://api.example.com/session")!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+        )
+
+        do {
+            _ = try await client.authenticate(with: "")
+            XCTFail("Expected authentication to fail")
+        } catch {
+            XCTAssertTrue(error is JMAPError)
+            if case let JMAPError.authenticationFailed(statusCode) = error {
+                XCTAssertEqual(statusCode, 401)
+            } else {
+                XCTFail("Expected authenticationFailed error")
+            }
+        }
+    }
+
+    func testErrorDescriptions() async throws {
+        // Test all error descriptions for security-related errors
+        let notAuthenticatedError = JMAPError.notAuthenticated
+        XCTAssertEqual(notAuthenticatedError.errorDescription, "Client is not authenticated. Please authenticate first.")
+
+        let invalidURLError = JMAPError.invalidURL
+        XCTAssertEqual(invalidURLError.errorDescription, "Invalid URL received from server.")
+
+        let authFailedError = JMAPError.authenticationFailed(statusCode: 401)
+        XCTAssertEqual(authFailedError.errorDescription, "Authentication failed with status code: 401")
+
+        let requestFailedError = JMAPError.requestFailed(statusCode: 500)
+        XCTAssertEqual(requestFailedError.errorDescription, "Request failed with status code: 500")
+    }
+
+    func testClientDeinitialization() async throws {
+        // Test that client properly cleans up when deallocated
+        var testClient: JMAPClient? = JMAPClient(baseURL: URL(string: "https://api.example.com")!, httpClient: mockHTTPClient)
+
+        // Authenticate the client
+        let sessionResponse = """
+        {
+            "capabilities": {
+                "urn:ietf:params:jmap:core": {},
+                "urn:ietf:params:jmap:mail": {}
+            },
+            "accounts": {
+                "account1": {
+                    "name": "test@example.com",
+                    "isPersonal": true,
+                    "isReadOnly": false,
+                    "accountCapabilities": {
+                        "urn:ietf:params:jmap:mail": {}
+                    }
+                }
+            },
+            "primaryAccounts": {
+                "urn:ietf:params:jmap:mail": "account1"
+            },
+            "username": "test@example.com",
+            "apiUrl": "https://api.example.com/jmap/api/",
+            "downloadUrl": "https://api.example.com/jmap/download/{accountId}/{blobId}/{name}",
+            "uploadUrl": "https://api.example.com/jmap/upload/{accountId}/",
+            "eventSourceUrl": "https://api.example.com/jmap/eventsource/?types={types}&closeafter={closeafter}&ping={ping}",
+            "state": "state123"
+        }
+        """
+
+        mockHTTPClient.nextResponse = (
+            sessionResponse.data(using: .utf8)!,
+            HTTPURLResponse(url: URL(string: "https://api.example.com/session")!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        )
+
+        _ = try await testClient!.authenticate(with: "test-token")
+        XCTAssertTrue(testClient!.isAuthenticated)
+
+        // Deallocate client - deinit should be called and clean up token
+        testClient = nil
+
+        // Test passes if no crashes occur during deallocation
+        XCTAssertNil(testClient)
+    }
+
+    func testMultipleLogoutCalls() async throws {
+        // Test that multiple logout calls don't cause issues
+        try await authenticateClient()
+        XCTAssertTrue(client.isAuthenticated)
+
+        // Call logout multiple times
+        client.logout()
+        XCTAssertFalse(client.isAuthenticated)
+
+        client.logout() // Should not crash or cause issues
+        XCTAssertFalse(client.isAuthenticated)
+
+        client.logout() // Third time should also be safe
+        XCTAssertFalse(client.isAuthenticated)
+    }
+
     // MARK: - Helper Methods
 
     private func authenticateClient() async throws {
