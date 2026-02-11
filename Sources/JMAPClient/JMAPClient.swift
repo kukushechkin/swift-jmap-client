@@ -58,7 +58,9 @@ public class AsyncHTTPClientHTTPClient: HTTPClient {
             url: url,
             statusCode: Int(response.status.code),
             httpVersion: "HTTP/1.1",
-            headerFields: Dictionary<String, String>(uniqueKeysWithValues: response.headers.map { ($0.name, $0.value) })
+            headerFields: Dictionary(response.headers.map { ($0.name, $0.value) }, uniquingKeysWith: { current, new in
+                "\(current);\(new)"
+            })
         )!
 
         return (data, urlResponse)
