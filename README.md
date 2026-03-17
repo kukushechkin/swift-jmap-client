@@ -1,5 +1,7 @@
 # Swift JMAP Client
 
+⚠️ This thing was entirely vibe-coded. It works for me. Might not work for you.
+
 A comprehensive Swift implementation of the JMAP (JSON Meta Application Protocol) for email operations, providing both a reusable library and a command-line interface.
 
 [![Swift](https://img.shields.io/badge/Swift-5.8+-orange.svg)](https://swift.org)
